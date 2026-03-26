@@ -50,6 +50,8 @@ class MainActivity : AppCompatActivity(), LocationListener {
     private lateinit var wifiSecurity: TextView
     private lateinit var wifiSecBar: View
     private lateinit var recordingStatus: TextView
+    private lateinit var startBtn: Button
+    private lateinit var stopBtn: Button
     private lateinit var clearHistoryBtn: Button
     private lateinit var historyBtn: Button
     private lateinit var exportBtn: Button
@@ -69,6 +71,12 @@ class MainActivity : AppCompatActivity(), LocationListener {
     private var currentGeoPoint = GeoPoint(13.0440, 80.2223)
     private var lastDbm: Int = -120
     private var isRecording = false
+    private var hasSignalReading = false
+
+    // Session dedupe (avoid new heatmap cell "jumps" while standing still)
+    private var lastHeatmapCell: Pair<Int, Int>? = null
+    private var lastHeatmapPoint: GeoPoint? = null
+    private var lastWifiAuditAtMs: Long = 0L
 
     // Grid Aggregation
     private data class SignalAggregate(
@@ -76,8 +84,11 @@ class MainActivity : AppCompatActivity(), LocationListener {
         var count: Int = 0,
         val center: GeoPoint
     )
-    private val heatmapSegments = mutableMapOf<Pair<Int, Int>, SignalAggregate>()
-    private val heatmapOverlays = mutableMapOf<Pair<Int, Int>, Polygon>()
+    private val historyHeatmapSegments = mutableMapOf<Pair<Int, Int>, SignalAggregate>()
+    private val historyHeatmapOverlays = mutableMapOf<Pair<Int, Int>, Polygon>()
+
+    private val sessionHeatmapSegments = mutableMapOf<Pair<Int, Int>, SignalAggregate>()
+    private val sessionHeatmapOverlays = mutableMapOf<Pair<Int, Int>, Polygon>()
 
     companion object {
         private const val PERM_REQUEST = 101
@@ -88,6 +99,13 @@ class MainActivity : AppCompatActivity(), LocationListener {
         )
         private const val GRID_SIZE_M = 20.0
         private const val DEG_TO_METERS = 111320.0
+
+        private const val MIN_HEATMAP_MOVE_M = 6.0
+        private const val WIFI_AUDIT_MIN_INTERVAL_MS = 4000L
+
+        // Used only for aggregated/session overlay coloring.
+        private const val NO_SIGNAL_MIN_DBM = -110
+        private const val EXCELLENT_DBM_MAX_DBM = -65
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -117,6 +135,8 @@ class MainActivity : AppCompatActivity(), LocationListener {
         wifiSecurity    = findViewById(R.id.wifiSecurity)
         wifiSecBar      = findViewById(R.id.wifiSecBar)
         recordingStatus = findViewById(R.id.recordingStatus)
+        startBtn        = findViewById(R.id.startBtn)
+        stopBtn         = findViewById(R.id.stopBtn)
         clearHistoryBtn = findViewById(R.id.clearHistoryBtn)
         historyBtn      = findViewById(R.id.historyBtn)
         exportBtn       = findViewById(R.id.exportBtn)
@@ -130,6 +150,11 @@ class MainActivity : AppCompatActivity(), LocationListener {
     }
 
     private fun setupButtons() {
+        stopBtn.isEnabled = false
+
+        startBtn.setOnClickListener { startScanning() }
+        stopBtn.setOnClickListener { stopScanning() }
+
         clearHistoryBtn.setOnClickListener {
             AlertDialog.Builder(this)
                 .setTitle("Clear Data")
@@ -138,9 +163,14 @@ class MainActivity : AppCompatActivity(), LocationListener {
                     lifecycleScope.launch(Dispatchers.IO) {
                         db.signalDao().clearAll()
                         withContext(Dispatchers.Main) {
-                            map.overlays.removeAll(heatmapOverlays.values)
-                            heatmapSegments.clear()
-                            heatmapOverlays.clear()
+                            map.overlays.removeAll(historyHeatmapOverlays.values)
+                            map.overlays.removeAll(sessionHeatmapOverlays.values)
+                            historyHeatmapSegments.clear()
+                            historyHeatmapOverlays.clear()
+                            sessionHeatmapSegments.clear()
+                            sessionHeatmapOverlays.clear()
+                            lastHeatmapCell = null
+                            lastHeatmapPoint = null
                             map.invalidate()
                         }
                     }
@@ -148,6 +178,58 @@ class MainActivity : AppCompatActivity(), LocationListener {
         }
         historyBtn.setOnClickListener { showHistoryDialog() }
         exportBtn.setOnClickListener { exportHistoryAsCsv() }
+    }
+
+    private fun startScanning() {
+        if (isRecording) return
+
+        // Reset session overlay (only start..stop should be aggregated here).
+        clearSessionHeatmap()
+
+        isRecording = true
+        recordingStatus.visibility = View.VISIBLE
+        startBtn.isEnabled = false
+        stopBtn.isEnabled = true
+
+        detectAndStart()
+    }
+
+    private fun stopScanning() {
+        if (!isRecording) return
+
+        isRecording = false
+        recordingStatus.visibility = View.GONE
+        startBtn.isEnabled = true
+        stopBtn.isEnabled = false
+
+        stopHardwareListeners()
+        simulationEngine?.stop()
+        simulationEngine = null
+    }
+
+    private fun clearSessionHeatmap() {
+        map.overlays.removeAll(sessionHeatmapOverlays.values)
+        sessionHeatmapSegments.clear()
+        sessionHeatmapOverlays.clear()
+        lastHeatmapCell = null
+        lastHeatmapPoint = null
+        hasSignalReading = false
+        map.invalidate()
+    }
+
+    private fun stopHardwareListeners() {
+        try {
+            if (signalListener != null) {
+                telephonyManager.listen(
+                    signalListener,
+                    android.telephony.PhoneStateListener.LISTEN_NONE
+                )
+            }
+        } catch (_: SecurityException) { }
+
+        try {
+            locationManager.removeUpdates(this)
+        } catch (_: SecurityException) { }
     }
 
     // ── Grid Calculation ─────────────────────────────────────────────────────
@@ -167,12 +249,16 @@ class MainActivity : AppCompatActivity(), LocationListener {
     // ── Signal Logic ─────────────────────────────────────────────────────────
 
     private fun updateSignalUI(dbm: Int) {
+        if (!isRecording) return
+        hasSignalReading = true
+
         val (label, color) = getSignalProperties(dbm)
         signalText.text = "Signal: $dbm dBm — $label"
         signalText.setTextColor(color)
         signalBar.setBackgroundColor(color)
 
-        updateHeatmap(currentGeoPoint, dbm)
+        updateWifiUIThrottled()
+        updateSessionHeatmap(currentGeoPoint, dbm)
     }
 
     private fun getSignalProperties(dbm: Int): Pair<String, Int> {
@@ -185,9 +271,29 @@ class MainActivity : AppCompatActivity(), LocationListener {
         }
     }
 
-    private fun updateHeatmap(point: GeoPoint, dbm: Int) {
+    private fun updateWifiUIThrottled() {
+        val now = System.currentTimeMillis()
+        if (now - lastWifiAuditAtMs < WIFI_AUDIT_MIN_INTERVAL_MS) return
+        lastWifiAuditAtMs = now
+        updateWifiUI()
+    }
+
+    private fun updateWifiUI() {
+        val audit = wifiAuditor.performAudit()
+        val barColor = when (audit.riskLevel) {
+            WifiSecurityAuditor.RiskLevel.SAFE -> Color.parseColor("#2E7D32")
+            WifiSecurityAuditor.RiskLevel.WARNING -> Color.parseColor("#FB8C00")
+            WifiSecurityAuditor.RiskLevel.DANGER -> Color.parseColor("#D32F2F")
+        }
+
+        // Keep the WiFi line readable and actionable.
+        wifiSecurity.text = audit.message
+        wifiSecBar.setBackgroundColor(barColor)
+    }
+
+    private fun updateHistoryHeatmap(point: GeoPoint, dbm: Int) {
         val cell = getGridCell(point)
-        val aggregate = heatmapSegments.getOrPut(cell) {
+        val aggregate = historyHeatmapSegments.getOrPut(cell) {
             SignalAggregate(0.0, 0, getCellCenter(cell.first, cell.second, point.latitude))
         }
 
@@ -196,19 +302,97 @@ class MainActivity : AppCompatActivity(), LocationListener {
 
         val avgDbm = (aggregate.sumDbm / aggregate.count).toInt()
         val (_, color) = getSignalProperties(avgDbm)
-        
-        // Render or Update Overlay
-        val overlay = heatmapOverlays.getOrPut(cell) {
+
+        val overlay = historyHeatmapOverlays.getOrPut(cell) {
             Polygon(map).apply {
+                outlinePaint.strokeWidth = 1f
                 outlinePaint.color = Color.TRANSPARENT
                 map.overlays.add(this)
             }
         }
 
-        // Requirement 5: Radius slightly larger than grid size (25m) to ensure overlap/continuity
         overlay.points = Polygon.pointsAsCircle(aggregate.center, 25.0)
         overlay.fillPaint.color = adjustAlpha(color, 0.5f)
+        overlay.outlinePaint.color = adjustAlpha(color, 0.18f)
         map.invalidate()
+    }
+
+    private fun updateSessionHeatmap(point: GeoPoint, dbm: Int) {
+        val rawCell = getGridCell(point)
+        val cell = resolveStableCell(rawCell, point)
+
+        val aggregate = sessionHeatmapSegments.getOrPut(cell) {
+            SignalAggregate(0.0, 0, getCellCenter(cell.first, cell.second, point.latitude))
+        }
+
+        aggregate.sumDbm += dbm
+        aggregate.count++
+
+        val avgDbm = (aggregate.sumDbm / aggregate.count).toInt()
+        val color = getAggregatedSignalColor(avgDbm)
+
+        // "Color only" update: keep circle geometry fixed; update fill color on each signal change.
+        val overlay = sessionHeatmapOverlays.getOrPut(cell) {
+            Polygon(map).apply {
+                outlinePaint.strokeWidth = 1f
+                outlinePaint.color = Color.TRANSPARENT
+                points = Polygon.pointsAsCircle(aggregate.center, 25.0)
+                map.overlays.add(this)
+            }
+        }
+
+        overlay.fillPaint.color = adjustAlpha(color, 0.62f)
+        overlay.outlinePaint.color = adjustAlpha(color, 0.2f)
+        map.invalidate()
+    }
+
+    private fun resolveStableCell(candidateCell: Pair<Int, Int>, point: GeoPoint): Pair<Int, Int> {
+        val prevPoint = lastHeatmapPoint
+        val prevCell = lastHeatmapCell
+        if (prevPoint != null && prevCell != null) {
+            val dist = distanceMeters(prevPoint, point)
+            if (dist < MIN_HEATMAP_MOVE_M) {
+                // Standing still: do not "jump" to a new cell overlay.
+                lastHeatmapPoint = point
+                return prevCell
+            }
+        }
+        lastHeatmapPoint = point
+        lastHeatmapCell = candidateCell
+        return candidateCell
+    }
+
+    private fun distanceMeters(a: GeoPoint, b: GeoPoint): Double {
+        val r = 6371000.0
+
+        val dLat = toRadians(b.latitude - a.latitude)
+        val dLon = toRadians(b.longitude - a.longitude)
+        val lat1 = toRadians(a.latitude)
+        val lat2 = toRadians(b.latitude)
+
+        val sinDLat = kotlin.math.sin(dLat / 2.0)
+        val sinDLon = kotlin.math.sin(dLon / 2.0)
+        val h = sinDLat * sinDLat + kotlin.math.cos(lat1) * kotlin.math.cos(lat2) * sinDLon * sinDLon
+        val c = 2.0 * kotlin.math.atan2(kotlin.math.sqrt(h), kotlin.math.sqrt(1.0 - h))
+        return r * c
+    }
+
+    /**
+     * Aggregated coloring for a scan session.
+     * Requirement: when signal spans from "green -> red" inside a region,
+     * the region color should end up in the "yellow/orange" range.
+     */
+    private fun getAggregatedSignalColor(avgDbm: Int): Int {
+        val score = ((avgDbm - NO_SIGNAL_MIN_DBM).toDouble() / (EXCELLENT_DBM_MAX_DBM - NO_SIGNAL_MIN_DBM))
+            .coerceIn(0.0, 1.0)
+
+        return when {
+            score >= 0.85 -> Color.parseColor("#2E7D32") // green
+            score >= 0.70 -> Color.parseColor("#66BB6A") // light green
+            score >= 0.55 -> Color.parseColor("#FDD835") // yellow
+            score >= 0.35 -> Color.parseColor("#FB8C00") // orange
+            else -> Color.parseColor("#D32F2F") // red
+        }
     }
 
     private fun adjustAlpha(color: Int, factor: Float): Int {
@@ -221,6 +405,11 @@ class MainActivity : AppCompatActivity(), LocationListener {
     override fun onLocationChanged(location: Location) {
         currentGeoPoint = GeoPoint(location.latitude, location.longitude)
         map.controller.animateTo(currentGeoPoint)
+        if (isRecording) {
+            updateWifiUIThrottled()
+            // Ensure the whole route segment gets aggregated, even if dBm didn't change.
+            if (hasSignalReading) updateSessionHeatmap(currentGeoPoint, lastDbm)
+        }
         saveCurrentSignalState()
     }
 
@@ -241,7 +430,7 @@ class MainActivity : AppCompatActivity(), LocationListener {
         lifecycleScope.launch(Dispatchers.IO) {
             val history = db.signalDao().getAllHistory()
             withContext(Dispatchers.Main) {
-                history.forEach { updateHeatmap(GeoPoint(it.latitude, it.longitude), it.dbm) }
+                history.forEach { updateHistoryHeatmap(GeoPoint(it.latitude, it.longitude), it.dbm) }
             }
         }
     }
@@ -262,7 +451,9 @@ class MainActivity : AppCompatActivity(), LocationListener {
             runOnFirstFix { runOnUiThread { if (myLocation != null) map.controller.animateTo(myLocation) } }
         }
         map.overlays.add(myLocationOverlay)
-        detectAndStart()
+        recordingStatus.visibility = View.GONE
+        stopBtn.isEnabled = false
+        startBtn.isEnabled = true
     }
 
     private fun detectAndStart() {
@@ -273,8 +464,6 @@ class MainActivity : AppCompatActivity(), LocationListener {
     private fun isEmulator() = Build.MODEL.contains("Emulator") || Build.MODEL.contains("Android SDK")
 
     private fun startHardwareListeners() {
-        isRecording = true
-        recordingStatus.visibility = View.VISIBLE
         try {
             signalListener = SignalStrengthListener { dbm -> runOnUiThread { lastDbm = dbm; updateSignalUI(dbm) } }
             telephonyManager.listen(signalListener, android.telephony.PhoneStateListener.LISTEN_SIGNAL_STRENGTHS)
