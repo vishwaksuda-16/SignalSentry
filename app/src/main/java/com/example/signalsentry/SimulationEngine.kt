@@ -46,6 +46,7 @@ class SimulationEngine(
     private var isRunning = false
 
     fun start() {
+        if (isRunning) return
         isRunning = true
         waypointIndex = 0
         scheduleNextWaypoint()

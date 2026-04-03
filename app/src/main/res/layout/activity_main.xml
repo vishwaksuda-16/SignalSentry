@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#F5F5F5">
@@ -8,331 +9,252 @@
         android:id="@+id/map"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_above="@+id/dashboard" />
+        android:layout_above="@+id/dashboardCard" />
 
-    <!-- Heatmap Legend -->
-    <LinearLayout
+    <!-- Heatmap Legend - Repositioned to be less intrusive -->
+    <androidx.cardview.widget.CardView
         android:id="@+id/heatmapLegend"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_alignParentTop="true"
-        android:layout_alignParentStart="true"
-        android:layout_margin="12dp"
-        android:orientation="vertical"
-        android:background="#CCFFFFFF"
-        android:elevation="8dp"
-        android:paddingStart="10dp"
-        android:paddingEnd="10dp"
-        android:paddingTop="8dp"
-        android:paddingBottom="8dp">
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Signal Strength"
-            android:textColor="#212121"
-            android:textStyle="bold"
-            android:textSize="12sp"
-            android:layout_marginBottom="6dp" />
+        android:layout_alignParentEnd="true"
+        android:layout_margin="16dp"
+        app:cardCornerRadius="8dp"
+        app:cardElevation="4dp"
+        app:cardBackgroundColor="#CCFFFFFF">
 
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="4dp">
+            android:orientation="vertical"
+            android:padding="10dp">
 
-            <View
-                android:layout_width="10dp"
-                android:layout_height="10dp"
-                android:background="#2E7D32"
-                android:layout_marginEnd="8dp" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Excellent"
+                android:text="Signal Legend"
                 android:textColor="#212121"
-                android:textSize="11sp" />
-        </LinearLayout>
+                android:textStyle="bold"
+                android:textSize="10sp"
+                android:layout_marginBottom="6dp" />
 
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="4dp">
-
-            <View
-                android:layout_width="10dp"
-                android:layout_height="10dp"
-                android:background="#66BB6A"
-                android:layout_marginEnd="8dp" />
-            <TextView
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Good"
-                android:textColor="#212121"
-                android:textSize="11sp" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="4dp">
-
-            <View
-                android:layout_width="10dp"
-                android:layout_height="10dp"
-                android:background="#FDD835"
-                android:layout_marginEnd="8dp" />
-            <TextView
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="3dp">
+                <View android:layout_width="8dp" android:layout_height="8dp" android:background="#2E7D32" android:layout_marginEnd="8dp" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Excellent" android:textColor="#424242" android:textSize="9sp" />
+            </LinearLayout>
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Moderate"
-                android:textColor="#212121"
-                android:textSize="11sp" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="4dp">
-
-            <View
-                android:layout_width="10dp"
-                android:layout_height="10dp"
-                android:background="#FB8C00"
-                android:layout_marginEnd="8dp" />
-            <TextView
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="3dp">
+                <View android:layout_width="8dp" android:layout_height="8dp" android:background="#66BB6A" android:layout_marginEnd="8dp" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Good" android:textColor="#424242" android:textSize="9sp" />
+            </LinearLayout>
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Poor"
-                android:textColor="#212121"
-                android:textSize="11sp" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
-
-            <View
-                android:layout_width="10dp"
-                android:layout_height="10dp"
-                android:background="#D32F2F"
-                android:layout_marginEnd="8dp" />
-            <TextView
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="3dp">
+                <View android:layout_width="8dp" android:layout_height="8dp" android:background="#FDD835" android:layout_marginEnd="8dp" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Moderate" android:textColor="#424242" android:textSize="9sp" />
+            </LinearLayout>
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Very Poor"
-                android:textColor="#212121"
-                android:textSize="11sp" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="3dp">
+                <View android:layout_width="8dp" android:layout_height="8dp" android:background="#FB8C00" android:layout_marginEnd="8dp" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Poor" android:textColor="#424242" android:textSize="9sp" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <View android:layout_width="8dp" android:layout_height="8dp" android:background="#D32F2F" android:layout_marginEnd="8dp" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Very Poor" android:textColor="#424242" android:textSize="9sp" />
+            </LinearLayout>
         </LinearLayout>
+    </androidx.cardview.widget.CardView>
 
-    </LinearLayout>
-
-    <LinearLayout
-        android:id="@+id/dashboard"
+    <androidx.cardview.widget.CardView
+        android:id="@+id/dashboardCard"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
-        android:background="@android:color/white"
-        android:elevation="16dp"
-        android:orientation="vertical"
-        android:paddingStart="20dp"
-        android:paddingEnd="20dp"
-        android:paddingTop="16dp"
-        android:paddingBottom="36dp"> <!-- Added bottom padding for nav bar -->
+        android:layout_marginBottom="24dp"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="12dp">
 
         <LinearLayout
+            android:id="@+id/dashboard"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="6dp">
+            android:orientation="vertical"
+            android:paddingStart="20dp"
+            android:paddingEnd="20dp"
+            android:paddingTop="16dp"
+            android:paddingBottom="16dp"
+            android:background="@android:color/white">
 
-            <TextView
-                android:layout_width="0dp"
-                android:layout_weight="1"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="SIGNALSENTRY"
-                android:textColor="#9E9E9E"
-                android:textSize="11sp"
-                android:textStyle="bold" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="12dp">
 
-            <TextView
-                android:id="@+id/recordingStatus"
-                android:layout_width="wrap_content"
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="wrap_content"
+                    android:text="SIGNALSENTRY MONITOR"
+                    android:textColor="#9E9E9E"
+                    android:textSize="10sp"
+                    android:letterSpacing="0.1"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/recordingStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="● RECORDING"
+                    android:textColor="#C62828"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <!-- Signal & Security Info -->
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="● RECORDING"
-                android:textColor="#C62828"
-                android:textSize="10sp"
-                android:textStyle="bold"
-                android:visibility="gone" />
-        </LinearLayout>
+                android:orientation="vertical"
+                android:layout_marginBottom="16dp">
 
-        <!-- Signal row -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="12dp">
+                <!-- Signal row -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="10dp">
+                    <View android:id="@+id/signalBar" android:layout_width="4dp" android:layout_height="28dp" android:background="#BDBDBD" android:layout_marginEnd="14dp" />
+                    <TextView android:id="@+id/signalText" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Signal: Initializing..." android:textColor="#212121" android:textSize="16sp" android:textStyle="bold" />
+                </LinearLayout>
 
-            <View
-                android:id="@+id/signalBar"
-                android:layout_width="6dp"
-                android:layout_height="36dp"
-                android:background="#4CAF50"
-                android:layout_marginEnd="12dp" />
+                <!-- Security row -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="10dp">
+                    <View android:id="@+id/cellSecBar" android:layout_width="4dp" android:layout_height="22dp" android:background="#BDBDBD" android:layout_marginEnd="14dp" />
+                    <TextView android:id="@+id/securityAlert" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Cellular: Scanning..." android:textColor="#616161" android:textSize="13sp" />
+                </LinearLayout>
 
-            <TextView
-                android:id="@+id/signalText"
-                android:layout_width="wrap_content"
+                <!-- WiFi row -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+                    <View android:id="@+id/wifiSecBar" android:layout_width="4dp" android:layout_height="22dp" android:background="#BDBDBD" android:layout_marginEnd="14dp" />
+                    <TextView android:id="@+id/wifiSecurity" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="WiFi: Checking..." android:textColor="#616161" android:textSize="13sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#EEEEEE" android:layout_marginBottom="16dp" />
+
+            <!-- Main Controls -->
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Signal: Initializing..."
-                android:textColor="#212121"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-        </LinearLayout>
+                android:orientation="horizontal"
+                android:layout_marginBottom="12dp">
 
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="#EEEEEE"
-            android:layout_marginBottom="10dp" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/startBtn"
+                    android:layout_width="0dp"
+                    android:layout_height="54dp"
+                    android:layout_weight="1"
+                    android:text="START"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="12dp"
+                    android:backgroundTint="#2E7D32"
+                    android:textColor="@android:color/white"
+                    android:layout_marginEnd="6dp"
+                    app:elevation="4dp"/>
 
-        <!-- Cellular security row -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="8dp">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/stopBtn"
+                    android:layout_width="0dp"
+                    android:layout_height="54dp"
+                    android:layout_weight="1"
+                    android:text="STOP"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="12dp"
+                    android:backgroundTint="#C62828"
+                    android:textColor="@android:color/white"
+                    android:enabled="false"
+                    android:layout_marginStart="6dp"
+                    app:elevation="4dp"/>
+            </LinearLayout>
 
-            <View
-                android:id="@+id/cellSecBar"
-                android:layout_width="6dp"
-                android:layout_height="28dp"
-                android:background="#4CAF50"
-                android:layout_marginEnd="12dp" />
-
-            <TextView
-                android:id="@+id/securityAlert"
-                android:layout_width="wrap_content"
+            <!-- Utility Buttons -->
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Security: Scanning..."
-                android:textColor="#388E3C"
-                android:textSize="14sp"
-                android:textStyle="bold" />
+                android:orientation="horizontal"
+                android:gravity="center">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/historyBtn"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="ANALYSIS"
+                    android:textSize="10sp"
+                    android:textColor="#424242"
+                    app:rippleColor="#1A000000" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/exportBtn"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="EXPORT"
+                    android:textSize="10sp"
+                    android:textColor="#424242"
+                    app:rippleColor="#1A000000" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/clearHistoryBtn"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="CLEAR MAP"
+                    android:textSize="10sp"
+                    android:textColor="#D32F2F"
+                    app:rippleColor="#1AD32F2F" />
+
+            </LinearLayout>
         </LinearLayout>
-
-        <!-- WiFi / MITM row -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
-
-            <View
-                android:id="@+id/wifiSecBar"
-                android:layout_width="6dp"
-                android:layout_height="28dp"
-                android:background="#4CAF50"
-                android:layout_marginEnd="12dp" />
-
-            <TextView
-                android:id="@+id/wifiSecurity"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="WiFi: Checking..."
-                android:textColor="#212121"
-                android:textSize="13sp" />
-        </LinearLayout>
-
-        <!-- Scan controls row -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginTop="12dp">
-
-            <Button
-                android:id="@+id/startBtn"
-                android:layout_width="0dp"
-                android:layout_height="44dp"
-                android:layout_weight="1"
-                android:text="START"
-                android:textSize="10sp"
-                android:backgroundTint="#388E3C"
-                android:textColor="@android:color/white"
-                android:textStyle="bold"
-                style="@style/Widget.AppCompat.Button.Borderless"/>
-
-            <Button
-                android:id="@+id/stopBtn"
-                android:layout_width="0dp"
-                android:layout_height="44dp"
-                android:layout_weight="1"
-                android:text="STOP"
-                android:textSize="10sp"
-                android:backgroundTint="#C62828"
-                android:textColor="@android:color/white"
-                android:textStyle="bold"
-                android:enabled="false"
-                style="@style/Widget.AppCompat.Button.Borderless"/>
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="12dp">
-
-            <Button
-                android:id="@+id/historyBtn"
-                android:layout_width="0dp"
-                android:layout_height="44dp"
-                android:layout_weight="1"
-                android:text="HISTORY"
-                android:textSize="10sp"
-                android:backgroundTint="#EEEEEE"
-                android:textColor="#212121"
-                android:textStyle="bold"
-                style="@style/Widget.AppCompat.Button.Borderless"/>
-
-            <Button
-                android:id="@+id/exportBtn"
-                android:layout_width="0dp"
-                android:layout_height="44dp"
-                android:layout_weight="1"
-                android:text="EXPORT CSV"
-                android:textSize="10sp"
-                android:backgroundTint="#EEEEEE"
-                android:textColor="#212121"
-                android:textStyle="bold"
-                style="@style/Widget.AppCompat.Button.Borderless"/>
-
-            <Button
-                android:id="@+id/clearHistoryBtn"
-                android:layout_width="0dp"
-                android:layout_height="44dp"
-                android:layout_weight="1"
-                android:text="CLEAR"
-                android:textSize="10sp"
-                android:backgroundTint="#EEEEEE"
-                android:textColor="#C62828"
-                android:textStyle="bold"
-                style="@style/Widget.AppCompat.Button.Borderless"/>
-
-        </LinearLayout>
-
-    </LinearLayout>
-
+    </androidx.cardview.widget.CardView>
 </RelativeLayout>
