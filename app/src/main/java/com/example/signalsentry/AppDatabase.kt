@@ -5,7 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [SignalData::class], version = 1)
+@Database(entities = [SignalData::class, ScanSession::class], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun signalDao(): SignalDao
 
@@ -19,7 +19,9 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "signal_database"
-                ).build()
+                )
+                .fallbackToDestructiveMigration() // Reset DB for new schema during dev
+                .build()
                 INSTANCE = instance
                 instance
             }
