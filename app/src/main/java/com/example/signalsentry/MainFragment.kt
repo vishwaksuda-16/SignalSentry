@@ -3,6 +3,8 @@ package com.example.signalsentry
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
 import android.location.Location
 import android.location.LocationListener
@@ -32,8 +34,11 @@ import org.osmdroid.views.overlay.Polygon
 import org.osmdroid.views.overlay.Polyline
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
+import java.io.File
+import java.io.FileOutputStream
 import java.util.*
 import kotlin.math.cos
+import kotlin.math.sin
 import java.lang.Math.toRadians
 
 class MainFragment : Fragment(), LocationListener {
@@ -78,10 +83,10 @@ class MainFragment : Fragment(), LocationListener {
             Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.READ_PHONE_STATE
         )
-        private const val GRID_SIZE_M = 15.0
+        private const val GRID_SIZE_M = 12.0
         private const val DEG_TO_METERS = 111320.0
-        private const val MIN_HEATMAP_MOVE_M = 5.0
-        private const val WIFI_AUDIT_MIN_INTERVAL_MS = 3000L
+        private const val MIN_HEATMAP_MOVE_M = 3.0
+        private const val WIFI_AUDIT_MIN_INTERVAL_MS = 2000L
         private const val NO_SIGNAL_MIN_DBM = -110
         private const val EXCELLENT_DBM_MAX_DBM = -65
         private const val TWO_MINUTES = 1000 * 60 * 2
@@ -102,14 +107,27 @@ class MainFragment : Fragment(), LocationListener {
         setupMap()
         setupButtons()
         checkPermissions()
+        
+        // Initial cellular status update
+        updateRealNetworkType()
     }
 
     private fun setupMap() {
         binding.map.setTileSource(TileSourceFactory.MAPNIK)
         binding.map.setMultiTouchControls(true)
-        binding.map.controller.setZoom(18.0)
+        binding.map.controller.setZoom(19.0)
         binding.map.controller.setCenter(currentGeoPoint)
         binding.map.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+        
+        // Immediate location initialization from last known
+        if (ActivityCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            val lastKnown = locationManager.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER)
+                ?: locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+            lastKnown?.let {
+                currentGeoPoint = GeoPoint(it.latitude, it.longitude)
+                binding.map.controller.setCenter(currentGeoPoint)
+            }
+        }
     }
 
     private fun setupButtons() {
@@ -127,7 +145,7 @@ class MainFragment : Fragment(), LocationListener {
         sessionStartTime = System.currentTimeMillis()
         
         sessionPolyline = Polyline(binding.map).apply {
-            outlinePaint.color = Color.DKGRAY
+            outlinePaint.color = Color.parseColor("#424242")
             outlinePaint.strokeWidth = 10f
             binding.map.overlays.add(this)
         }
@@ -139,6 +157,7 @@ class MainFragment : Fragment(), LocationListener {
         
         detectAndInitializeSimulation()
         simulationEngine?.start()
+        Toast.makeText(requireContext(), "Scanning Started", Toast.LENGTH_SHORT).show()
     }
 
     private fun stopScanning() {
@@ -155,22 +174,49 @@ class MainFragment : Fragment(), LocationListener {
             val avgDbm = if (totalPoints > 0) (sessionHeatmapSegments.values.sumOf { it.sumDbm } / totalPoints).toInt() else -120
             val deadZones = sessionHeatmapSegments.values.count { (it.sumDbm / it.count) <= -95 }
 
+            // Capture map snapshot before potentially clearing or navigating
+            val snapshotPath = withContext(Dispatchers.Main) { captureMapSnapshot() }
+
             val session = ScanSession(
                 startTime = sessionStartTime,
                 endTime = System.currentTimeMillis(),
                 avgDbm = avgDbm,
                 totalPoints = totalPoints,
-                deadZones = deadZones
+                deadZones = deadZones,
+                snapshotPath = snapshotPath
             )
             db.signalDao().insertSession(session)
 
             withContext(Dispatchers.Main) {
+                // Remove ephemeral session overlays
                 binding.map.overlays.removeAll(sessionHeatmapOverlays.values)
+                if (sessionPolyline != null) binding.map.overlays.remove(sessionPolyline)
                 sessionHeatmapSegments.clear()
                 sessionHeatmapOverlays.clear()
+                sessionPolyline = null
                 binding.map.invalidate()
                 Toast.makeText(requireContext(), "Scan Saved to History", Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+
+    private fun captureMapSnapshot(): String? {
+        return try {
+            val width = binding.map.width
+            val height = binding.map.height
+            if (width <= 0 || height <= 0) return null
+            
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            binding.map.draw(canvas)
+            
+            val file = File(requireContext().filesDir, "snap_${System.currentTimeMillis()}.jpg")
+            FileOutputStream(file).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 70, out)
+            }
+            file.absolutePath
+        } catch (e: Exception) {
+            null
         }
     }
 
@@ -203,10 +249,45 @@ class MainFragment : Fragment(), LocationListener {
         binding.signalBar.setBackgroundColor(color)
 
         updateWifiUIThrottled()
+        updateRealNetworkType() // Fixed: updates the "Cellular: Scanning..." part
+
         if (isRecording) {
             hasSignalReading = true
             updateSessionHeatmap(currentGeoPoint, dbm)
         }
+    }
+
+    private fun updateRealNetworkType() {
+        if (simulationEngine != null && isRecording) return // Simulation handles UI if active
+        
+        if (ActivityCompat.checkSelfPermission(requireContext(), Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
+            binding.securityAlert.text = "Cellular: Permission Missing"
+            return
+        }
+
+        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            telephonyManager.dataNetworkType
+        } else {
+            @Suppress("DEPRECATION")
+            telephonyManager.networkType
+        }
+
+        val typeStr = when (type) {
+            TelephonyManager.NETWORK_TYPE_NR -> "5G"
+            TelephonyManager.NETWORK_TYPE_LTE -> "LTE"
+            TelephonyManager.NETWORK_TYPE_HSPAP, TelephonyManager.NETWORK_TYPE_HSPA, TelephonyManager.NETWORK_TYPE_UMTS -> "3G"
+            TelephonyManager.NETWORK_TYPE_EDGE, TelephonyManager.NETWORK_TYPE_GPRS -> "2G"
+            else -> "Searching..."
+        }
+
+        val (msg, color) = when {
+            typeStr == "5G" || typeStr == "LTE" -> "Cellular: Secure ($typeStr)" to Color.parseColor("#2E7D32")
+            typeStr == "3G" -> "Cellular: Warning (3G)" to Color.parseColor("#FB8C00")
+            typeStr == "2G" -> "Cellular: 🚨 DANGER (2G)" to Color.parseColor("#D32F2F")
+            else -> "Cellular: $typeStr" to Color.parseColor("#616161")
+        }
+        binding.securityAlert.text = msg
+        binding.cellSecBar.setBackgroundColor(color)
     }
 
     private fun getSignalProperties(dbm: Int): Pair<String, Int> {
@@ -249,9 +330,8 @@ class MainFragment : Fragment(), LocationListener {
 
         val overlay = sessionHeatmapOverlays.getOrPut(cell) {
             Polygon(binding.map).apply {
-                outlinePaint.strokeWidth = 1f
-                outlinePaint.color = Color.TRANSPARENT
-                points = Polygon.pointsAsCircle(aggregate.center, 22.0)
+                outlinePaint.strokeWidth = 2f
+                points = generateCirclePoints(aggregate.center, 20.0) // Fixed: radar marks points
                 binding.map.overlays.add(this)
             }
         }
@@ -260,6 +340,17 @@ class MainFragment : Fragment(), LocationListener {
         overlay.outlinePaint.color = adjustAlpha(color, 0.2f)
         sessionPolyline?.addPoint(point)
         binding.map.invalidate()
+    }
+
+    private fun generateCirclePoints(center: GeoPoint, radiusMeters: Double): List<GeoPoint> {
+        val points = mutableListOf<GeoPoint>()
+        for (i in 0 until 360 step 20) {
+            val angle = toRadians(i.toDouble())
+            val lat = center.latitude + (radiusMeters / DEG_TO_METERS) * cos(angle)
+            val lon = center.longitude + (radiusMeters / (DEG_TO_METERS * cos(toRadians(center.latitude)))) * sin(angle)
+            points.add(GeoPoint(lat, lon))
+        }
+        return points
     }
 
     private fun resolveStableCell(candidateCell: Pair<Int, Int>, point: GeoPoint): Pair<Int, Int> {
@@ -299,7 +390,13 @@ class MainFragment : Fragment(), LocationListener {
         if (isBetterLocation(location, lastLocation)) {
             lastLocation = location
             currentGeoPoint = GeoPoint(location.latitude, location.longitude)
-            binding.map.controller.animateTo(currentGeoPoint)
+            
+            if (!isRecording) {
+                binding.map.controller.animateTo(currentGeoPoint)
+            } else {
+                binding.map.controller.setCenter(currentGeoPoint) // Keep centered while tracking
+            }
+            
             if (isRecording) {
                 updateWifiUIThrottled()
                 if (hasSignalReading) updateSessionHeatmap(currentGeoPoint, lastDbm)
@@ -308,49 +405,13 @@ class MainFragment : Fragment(), LocationListener {
         }
     }
 
-    /** Determines whether one Location reading is better than the current Location fix
-      * @param location  The new Location that you want to evaluate
-      * @param currentBestLocation  The current Location fix, to which you want to compare the new one
-      */
     private fun isBetterLocation(location: Location, currentBestLocation: Location?): Boolean {
-        if (currentBestLocation == null) {
-            // A new location is always better than no location
-            return true
-        }
-
-        // Check whether the new location fix is newer or older
+        if (currentBestLocation == null) return true
         val timeDelta: Long = location.time - currentBestLocation.time
         val isSignificantlyNewer: Boolean = timeDelta > TWO_MINUTES
-        val isSignificantlyOlder: Boolean = timeDelta < -TWO_MINUTES
-        val isNewer = timeDelta > 0
-
-        // If it's been more than two minutes since the current location, use the new location
-        // because the user has likely moved
-        if (isSignificantlyNewer) {
-            return true
-        // If the new location is more than two minutes older, it must be worse
-        } else if (isSignificantlyOlder) {
-            return false
-        }
-
-        // Check whether the new location fix is more or less accurate
+        if (isSignificantlyNewer) return true
         val accuracyDelta: Int = (location.accuracy - currentBestLocation.accuracy).toInt()
-        val isLessAccurate: Boolean = accuracyDelta > 0
-        val isMoreAccurate: Boolean = accuracyDelta < 0
-        val isSignificantlyLessAccurate: Boolean = accuracyDelta > 200
-
-        // Check if the old and new location are from the same provider
-        val isFromSameProvider: Boolean = location.provider == currentBestLocation.provider
-
-        // Determine location quality using a combination of timeliness and accuracy
-        if (isMoreAccurate) {
-            return true
-        } else if (isNewer && !isLessAccurate) {
-            return true
-        } else if (isNewer && !isSignificantlyLessAccurate && isFromSameProvider) {
-            return true
-        }
-        return false
+        return accuracyDelta <= 0 || (timeDelta > 0 && accuracyDelta < 20)
     }
 
     private fun saveCurrentSignalState() {
@@ -359,7 +420,7 @@ class MainFragment : Fragment(), LocationListener {
             latitude = currentGeoPoint.latitude,
             longitude = currentGeoPoint.longitude,
             dbm = lastDbm,
-            networkType = "LTE",
+            networkType = binding.securityAlert.text.toString(),
             isDeadZone = lastDbm <= -95
         )
         lifecycleScope.launch(Dispatchers.IO) { db.signalDao().insert(signalData) }
@@ -386,24 +447,13 @@ class MainFragment : Fragment(), LocationListener {
         if (ActivityCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return
 
         try {
-            val providers = listOf(LocationManager.PASSIVE_PROVIDER, LocationManager.NETWORK_PROVIDER, LocationManager.GPS_PROVIDER)
-            var bestLocation: Location? = null
-            for (p in providers) {
-                val l = locationManager.getLastKnownLocation(p) ?: continue
-                if (bestLocation == null || l.accuracy < bestLocation!!.accuracy) bestLocation = l
-            }
-            bestLocation?.let {
-                lastLocation = it
-                currentGeoPoint = GeoPoint(it.latitude, it.longitude)
-                binding.map.controller.setCenter(currentGeoPoint)
-                onLocationChanged(it)
-            }
-
-            locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 2000L, 5f, this)
-            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 2000L, 5f, this)
+            // High frequency updates for responsive "radar" marks
+            locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 1500L, 2f, this)
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1500L, 2f, this)
             
             setupSignalListener()
             detectAndInitializeSimulation()
+            updateRealNetworkType()
         } catch (e: SecurityException) { }
     }
 
@@ -460,7 +510,7 @@ class MainFragment : Fragment(), LocationListener {
                         val loc = Location("sim").apply {
                             latitude = geo.latitude
                             longitude = geo.longitude
-                            accuracy = 10f
+                            accuracy = 5f
                             time = System.currentTimeMillis()
                         }
                         onLocationChanged(loc)
@@ -493,8 +543,8 @@ class MainFragment : Fragment(), LocationListener {
         val dLon = toRadians(b.longitude - a.longitude)
         val lat1 = toRadians(a.latitude)
         val lat2 = toRadians(b.latitude)
-        val aVal = Math.sin(dLat / 2.0) * Math.sin(dLat / 2.0) +
-                   Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2.0) * Math.sin(dLon / 2.0)
+        val aVal = sin(dLat / 2.0) * sin(dLat / 2.0) +
+                   cos(lat1) * cos(lat2) * sin(dLon / 2.0) * sin(dLon / 2.0)
         return r * 2.0 * Math.atan2(Math.sqrt(aVal), Math.sqrt(1.0 - aVal))
     }
 
